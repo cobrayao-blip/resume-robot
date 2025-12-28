@@ -1,0 +1,74 @@
+============================================================
+鏁版嵁搴撹縼绉婚摼妫€鏌?
+============================================================
+
+鎬诲叡 18 涓縼绉绘枃浠?
+
+[OK] aa7db02dff0d... init
+[OK] c5895f9af329... increase_source_file_type_length
+    -> 鍩轰簬: aa7db02dff0d...
+[OK] c6e85d67e90b... add_template_version_management
+    -> 鍩轰簬: c5895f9af329...
+[OK] c65d06169be9... add_template_usage_count
+    -> 鍩轰簬: c6e85d67e90b...
+[OK] 63be29bcddb9... add_parsed_resume_table
+    -> 鍩轰簬: c65d06169be9...
+[OK] 485ef4294586... add_source_file_path_to_user_resumes
+    -> 鍩轰簬: 63be29bcddb9...
+[OK] cf25aa63f561... add_database_indexes_for_performance
+    -> 鍩轰簬: 485ef4294586...
+[OK] 293b19959363... add_parsed_resume_id_to_user_resumes
+    -> 鍩轰簬: cf25aa63f561...
+[OK] 51500ac153d3... rename_user_resumes_to_candidate_resumes_and_add_fields
+    -> 鍩轰簬: 293b19959363...
+[OK] de3fceb78d78... add_missing_candidate_name_column
+    -> 鍩轰簬: 51500ac153d3...
+[OK] f1a2b3c4d5e6... add_user_llm_config
+    -> 鍩轰簬: de3fceb78d78...
+[OK] g7h8i9j0k1l2... add_platform_key_expires_at
+    -> 鍩轰簬: f1a2b3c4d5e6...
+[OK] h8i9j0k1l2m3... remove_platform_key_expires_at
+    -> 鍩轰簬: g7h8i9j0k1l2...
+[ERR] 0d699d2e281f... add_membership_management_fields
+    -> 鍩轰簬: de3fceb78d78...
+[OK] 7ac4288deb22... add_assigned_template_id_to_users
+    -> 鍩轰簬: 0d699d2e281f...
+[OK] 3d020aa21b4e... remove_default_usage_limit_and_update_existing_users
+    -> 鍩轰簬: 7ac4288deb22...
+[OK] 4a1b2c3d4e5f... add_system_settings_table
+    -> 鍩轰簬: 3d020aa21b4e...
+[ERR] 11fbf97ead8f... merge_membership_and_llm_config
+    -> 鍩轰簬: ('4a1b2c3d4e5f', 'g7h8i9j0k1l2')...
+Traceback (most recent call last):
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python314\Lib\site-packages\alembic\script\base.py", line 213, in _catch_revision_errors
+    yield
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python314\Lib\site-packages\alembic\script\base.py", line 276, in get_revisions
+    self.revision_map.get_revisions(id_),
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python314\Lib\site-packages\alembic\script\revision.py", line 544, in get_revisions
+    resolved_id, branch_label = self._resolve_revision_number(id_)
+                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python314\Lib\site-packages\alembic\script\revision.py", line 778, in _resolve_revision_number
+    current_head = self.get_current_head(branch_label)
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python314\Lib\site-packages\alembic\script\revision.py", line 508, in get_current_head
+    raise MultipleHeads(
+    ...<2 lines>...
+    )
+alembic.script.revision.MultipleHeads: Multiple heads are present for given argument 'head'; 11fbf97ead8f, h8i9j0k1l2m3
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\resume-ai-platform\backend\check_migrations.py", line 65, in <module>
+    success = check_migration_chain()
+  File "D:\resume-ai-platform\backend\check_migrations.py", line 48, in check_migration_chain
+    heads = script.get_revisions('head')
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python314\Lib\site-packages\alembic\script\base.py", line 273, in get_revisions
+    with self._catch_revision_errors():
+         ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python314\Lib\contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python314\Lib\site-packages\alembic\script\base.py", line 239, in _catch_revision_errors
+    raise util.CommandError(multiple_heads) from mh
+alembic.util.exc.CommandError: Multiple head revisions are present for given argument 'head'; please specify a specific target revision, '<branchname>@head' to narrow to a specific head, or 'heads' for all heads

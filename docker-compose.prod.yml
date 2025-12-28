@@ -1,0 +1,243 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: resume_db_prod
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - resume_network
+    # 生产环境不暴露端口到主机
+    # ports:
+    #   - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: resume_redis_prod
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - resume_network
+    # 生产环境不暴露端口到主机
+    # ports:
+    #   - "6379:6379"
+
+  mongodb:
+    image: mongo:7
+    container_name: resume_mongodb_prod
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - resume_network
+    # 生产环境不暴露端口到主机
+    # ports:
+    #   - "27017:27017"
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: resume_etcd_prod
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD-SHELL", "ETCDCTL_API=3 etcdctl endpoint health || exit 1"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - resume_network
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: resume_minio_prod
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+    command: minio server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - resume_network
+
+  milvus:
+    image: milvusdb/milvus:v2.3.3
+    container_name: resume_milvus_prod
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      etcd:
+        condition: service_started
+      minio:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9091/healthz || exit 1"]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+    networks:
+      - resume_network
+    # 生产环境不暴露端口到主机
+    # ports:
+    #   - "19530:19530"
+    #   - "9091:9091"
+
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: resume_backend_prod
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4"
+    working_dir: /app
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      MONGODB_URL: ${MONGODB_URL}
+      MILVUS_HOST: ${MILVUS_HOST:-milvus}
+      MILVUS_PORT: ${MILVUS_PORT:-19530}
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: ${DEBUG:-False}
+      EXPORT_DIR: /tmp/export
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-10}
+    volumes:
+      - backend_export:/tmp/export
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - resume_network
+    # 生产环境不直接暴露端口，通过Nginx代理
+    # ports:
+    #   - "8000:8000"
+
+  frontend-app:
+    build:
+      context: ./frontend/app
+      dockerfile: Dockerfile.prod
+    container_name: resume_frontend_app_prod
+    working_dir: /app
+    environment:
+      VITE_API_BASE: ${VITE_API_BASE:-/api/v1}
+    volumes:
+      - frontend_app_dist:/app/dist
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - resume_network
+    # 生产环境不直接暴露端口，通过Nginx代理
+
+  frontend-admin:
+    build:
+      context: ./frontend/admin
+      dockerfile: Dockerfile.prod
+    container_name: resume_frontend_admin_prod
+    working_dir: /app
+    environment:
+      VITE_API_BASE: ${VITE_API_BASE:-/api/v1}
+    volumes:
+      - frontend_admin_dist:/app/dist
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - resume_network
+    # 生产环境不直接暴露端口，通过Nginx代理
+
+  nginx:
+    image: nginx:alpine
+    container_name: resume_nginx_prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - frontend_app_dist:/usr/share/nginx/html/app:ro
+      - frontend_admin_dist:/usr/share/nginx/html/admin:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - backend
+      - frontend-app
+      - frontend-admin
+    restart: unless-stopped
+    networks:
+      - resume_network
+
+volumes:
+  db_data:
+  redis_data:
+  mongodb_data:
+  etcd_data:
+  minio_data:
+  milvus_data:
+  backend_export:
+  frontend_app_dist:
+  frontend_admin_dist:
+
+networks:
+  resume_network:
+    driver: bridge
+

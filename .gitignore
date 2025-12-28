@@ -1,0 +1,60 @@
+# 环境变量文件
+.env
+.env.local
+.env.prod
+.env.*.local
+
+# SSL证书（不应提交到Git）
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+
+# 日志文件
+nginx/logs/*.log
+*.log
+
+# 备份文件
+*.sql
+backup/
+*.backup
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# 临时文件
+*.tmp
+*.temp
+temp/
+tmp/
+
