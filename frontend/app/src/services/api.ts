@@ -71,12 +71,50 @@ api.interceptors.request.use(
   { runWhen: () => true } // 确保在所有情况下都运行
 );
 
-// 请求拦截器 - 添加token
+// Token工具函数：检查token是否即将过期（剩余时间少于5分钟）
+const isTokenExpiringSoon = (token: string): boolean => {
+  try {
+    // JWT token格式：header.payload.signature
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const exp = payload.exp; // 过期时间（Unix时间戳，秒）
+    const now = Math.floor(Date.now() / 1000); // 当前时间（Unix时间戳，秒）
+    const remainingSeconds = exp - now;
+    // 如果剩余时间少于5分钟（300秒），则认为即将过期
+    return remainingSeconds < 300;
+  } catch (e) {
+    console.error('解析token失败:', e);
+    return true; // 解析失败，认为即将过期
+  }
+};
+
+// 刷新token的Promise，防止并发刷新
+let refreshTokenPromise: Promise<boolean> | null = null;
+
+// 请求拦截器 - 添加token，并在token即将过期时自动刷新
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      // 检查token是否即将过期
+      if (isTokenExpiringSoon(token) && !config.url?.includes('/auth/refresh')) {
+        // 如果token即将过期且不是刷新请求，尝试刷新token
+        if (!refreshTokenPromise) {
+          const { useAuthStore } = await import('@/stores/authStore');
+          refreshTokenPromise = useAuthStore.getState().refreshToken();
+          refreshTokenPromise.finally(() => {
+            refreshTokenPromise = null;
+          });
+        }
+        // 等待token刷新完成
+        await refreshTokenPromise;
+        // 使用新的token
+        const newToken = localStorage.getItem('access_token');
+        if (newToken) {
+          config.headers.Authorization = `Bearer ${newToken}`;
+        }
+      } else {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -85,23 +123,54 @@ api.interceptors.request.use(
   }
 );
 
-// 响应拦截器 - 处理错误
+// 响应拦截器 - 处理错误，包括token过期自动刷新
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    // 如果是登录接口的 401 错误，不要跳转，让登录组件处理
-    const isLoginRequest = error.config?.url?.includes('/auth/login');
+  async (error) => {
+    const originalRequest = error.config;
+    const isLoginRequest = originalRequest?.url?.includes('/auth/login');
+    const isRefreshRequest = originalRequest?.url?.includes('/auth/refresh');
     
-    if (error.response?.status === 401) {
-      // 登录接口的 401 错误不跳转，让登录组件显示错误提示
-      if (!isLoginRequest) {
+    // 如果是401错误且不是登录/刷新请求，尝试刷新token
+    if (error.response?.status === 401 && !isLoginRequest && !isRefreshRequest) {
+      // 如果已经尝试过刷新，则直接跳转登录
+      if (originalRequest._retry) {
         localStorage.removeItem('access_token');
         localStorage.removeItem('user');
+        localStorage.removeItem('tenant_id');
         window.location.href = '/login';
+        return Promise.reject(error);
       }
+      
+      // 标记已尝试刷新，防止无限循环
+      originalRequest._retry = true;
+      
+      try {
+        // 尝试刷新token
+        const { useAuthStore } = await import('@/stores/authStore');
+        const refreshed = await useAuthStore.getState().refreshToken();
+        
+        if (refreshed) {
+          // token刷新成功，使用新token重试原请求
+          const newToken = localStorage.getItem('access_token');
+          if (newToken) {
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            return api(originalRequest);
+          }
+        }
+      } catch (refreshError) {
+        console.error('刷新token失败:', refreshError);
+      }
+      
+      // 刷新失败，清除token并跳转登录
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('tenant_id');
+      window.location.href = '/login';
     } else if (error.response?.status === 403) {
       message.error('权限不足');
     }
+    
     return Promise.reject(error);
   }
 );

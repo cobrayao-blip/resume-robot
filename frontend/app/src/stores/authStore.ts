@@ -12,6 +12,7 @@ interface AuthState {
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
+  refreshToken: () => Promise<boolean>;
   clearError: () => void;
 }
 
@@ -88,6 +89,40 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     } else {
       set({ user: null, tenantId: null, isAuthenticated: false, isLoading: false });
+    }
+  },
+
+  refreshToken: async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      return false;
+    }
+    
+    try {
+      const response = await api.post<AuthResponse>('/auth/refresh');
+      const { access_token, user } = response.data;
+      const tenant_id = user.tenant_id || null;
+      
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('user', JSON.stringify(user));
+      if (tenant_id) {
+        localStorage.setItem('tenant_id', String(tenant_id));
+      }
+      
+      set({ 
+        user, 
+        tenantId: tenant_id,
+        isAuthenticated: true 
+      });
+      return true;
+    } catch (error: any) {
+      console.error('刷新token失败:', error);
+      // 刷新失败，清除token
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('tenant_id');
+      set({ user: null, tenantId: null, isAuthenticated: false });
+      return false;
     }
   },
 

@@ -19,25 +19,33 @@ const CompanyInfoPage: React.FC = () => {
     const fetchCompanyInfo = async () => {
       setLoadingData(true);
       try {
-        const response = await jobApi.getCompanyInfo();
-        if (response.success && response.data) {
-          setCompanyInfo(response.data);
+        const data = await jobApi.getCompanyInfo();
+        // API 直接返回 CompanyInfo 对象，不是 {success: true, data: ...} 格式
+        if (data) {
+          setCompanyInfo(data);
           form.setFieldsValue({
-            name: response.data.name,
-            industry: response.data.industry,
-            products: response.data.products,
-            application_scenarios: response.data.application_scenarios,
-            company_culture: response.data.company_culture,
-            preferences: response.data.preferences,
-            company_size: response.data.company_size,
-            development_stage: response.data.development_stage,
-            business_model: response.data.business_model,
-            core_values: response.data.core_values,
-            recruitment_philosophy: response.data.recruitment_philosophy,
+            name: data.name,
+            industry: data.industry,
+            products: data.products,
+            application_scenarios: data.application_scenarios,
+            company_culture: data.company_culture,
+            preferences: data.preferences,
+            company_size: data.company_size,
+            development_stage: data.development_stage,
+            business_model: data.business_model,
+            core_values: data.core_values,
+            recruitment_philosophy: data.recruitment_philosophy,
           });
         }
       } catch (error: any) {
-        console.error('加载公司信息失败:', error);
+        // 404 错误表示公司信息不存在，这是正常情况，不需要显示错误
+        if (error.response?.status === 404) {
+          console.log('公司信息不存在，可以创建新记录');
+          setCompanyInfo(null);
+        } else {
+          console.error('加载公司信息失败:', error);
+          message.error('加载公司信息失败: ' + (error.response?.data?.detail || error.message));
+        }
       } finally {
         setLoadingData(false);
       }
@@ -59,11 +67,26 @@ const CompanyInfoPage: React.FC = () => {
         message.success('创建成功');
       }
       // 重新加载数据
-      const response = await jobApi.getCompanyInfo();
-      if (response.success && response.data) {
-        setCompanyInfo(response.data);
+      const data = await jobApi.getCompanyInfo();
+      if (data) {
+        setCompanyInfo(data);
+        // 更新表单字段值
+        form.setFieldsValue({
+          name: data.name,
+          industry: data.industry,
+          products: data.products,
+          application_scenarios: data.application_scenarios,
+          company_culture: data.company_culture,
+          preferences: data.preferences,
+          company_size: data.company_size,
+          development_stage: data.development_stage,
+          business_model: data.business_model,
+          core_values: data.core_values,
+          recruitment_philosophy: data.recruitment_philosophy,
+        });
       }
     } catch (error: any) {
+      console.error('保存公司信息失败:', error);
       message.error('保存失败: ' + (error.response?.data?.detail || error.message));
     } finally {
       setLoading(false);

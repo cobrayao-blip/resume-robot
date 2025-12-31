@@ -235,3 +235,75 @@ async def login(
         "token_type": "bearer",
         "user": user
     }
+
+
+@router.post("/refresh", response_model=Token)
+async def refresh_token(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    刷新访问令牌
+    
+    使用当前有效的token刷新获取新的token，延长会话时间。
+    如果当前token已过期，将返回401错误。
+    
+    **功能说明**:
+    - 验证当前token是否有效
+    - 检查用户账户状态
+    - 生成新的访问令牌（有效期30分钟）
+    
+    **响应示例**:
+    ```json
+    {
+      "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "token_type": "bearer",
+      "user": { ... }
+    }
+    ```
+    """
+    from ....core.security import get_email_from_token
+    
+    # 从请求头获取token
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的授权头"
+        )
+    
+    token = auth_header.replace("Bearer ", "")
+    email = get_email_from_token(token)
+    
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的令牌或令牌已过期"
+        )
+    
+    # 查询用户
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在"
+        )
+    
+    # 检查用户账户状态
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="账户已被禁用，请联系管理员！"
+        )
+    
+    # 创建新的访问令牌（包含tenant_id）
+    token_data = {"sub": user.email}
+    if hasattr(user, 'tenant_id') and user.tenant_id is not None:
+        token_data["tenant_id"] = user.tenant_id
+    access_token = create_access_token(data=token_data)
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user
+    }

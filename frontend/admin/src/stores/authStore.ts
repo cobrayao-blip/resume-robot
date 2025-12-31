@@ -11,6 +11,7 @@ interface AuthState {
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
+  refreshToken: () => Promise<boolean>;
   clearError: () => void;
 }
 
@@ -81,6 +82,40 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     } else {
       set({ user: null, isAuthenticated: false, isLoading: false });
+    }
+  },
+
+  refreshToken: async () => {
+    const token = localStorage.getItem('admin_access_token');
+    if (!token) {
+      return false;
+    }
+    
+    try {
+      const response = await api.post<AuthResponse>('/auth/refresh');
+      const { access_token, user } = response.data;
+      
+      // 检查用户是否有平台管理员权限
+      if (user.role !== 'platform_admin' && user.user_type !== 'super_admin') {
+        console.error('刷新token失败: 用户不是平台管理员');
+        return false;
+      }
+      
+      localStorage.setItem('admin_access_token', access_token);
+      localStorage.setItem('admin_user', JSON.stringify(user));
+      
+      set({ 
+        user, 
+        isAuthenticated: true 
+      });
+      return true;
+    } catch (error: any) {
+      console.error('刷新token失败:', error);
+      // 刷新失败，清除token
+      localStorage.removeItem('admin_access_token');
+      localStorage.removeItem('admin_user');
+      set({ user: null, isAuthenticated: false });
+      return false;
     }
   },
 

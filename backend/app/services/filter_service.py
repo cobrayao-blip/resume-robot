@@ -313,38 +313,75 @@ class FilterService:
                     "passed": False,
                     "reason": "简历中无出生日期信息",
                     "matched_value": None,
-                    "expected_value": rule_config.get("age_range")
+                    "expected_value": rule_config.get("age_range") or f"{rule_config.get('min_age', 'N/A')}-{rule_config.get('max_age', 'N/A')}"
                 }
             
             # 计算年龄
             age = self._calculate_age(birth_date)
             
-            # 获取规则要求
-            age_range = rule_config.get("age_range")  # 格式: "25-35" 或 "30"
+            # 优先使用新格式（min_age 和 max_age），向后兼容旧格式（age_range）
+            min_age = rule_config.get("min_age")
+            max_age = rule_config.get("max_age")
+            age_range = rule_config.get("age_range")
             operator = rule_config.get("operator", "in_range")
             
-            if operator == "in_range":
-                # 解析年龄范围
-                if "-" in age_range:
-                    min_age, max_age = map(int, age_range.split("-"))
-                    passed = min_age <= age <= max_age
-                    reason = f"候选人年龄: {age}岁, 要求范围: {age_range}岁"
+            # 如果使用新格式（min_age 和 max_age）
+            if min_age is not None or max_age is not None:
+                # 处理 None 值：如果只设置了 min_age，max_age 设为无穷大；如果只设置了 max_age，min_age 设为 0
+                if min_age is None:
+                    min_age = 0
+                if max_age is None:
+                    max_age = 999  # 设置一个很大的值，表示无上限
+                
+                # 检查年龄是否在范围内
+                passed = min_age <= age <= max_age
+                reason = f"候选人年龄: {age}岁, 要求范围: {min_age}-{max_age}岁"
+                expected_value = f"{min_age}-{max_age}"
+            
+            # 如果使用旧格式（age_range 字符串）
+            elif age_range:
+                if operator == "in_range":
+                    # 解析年龄范围字符串（格式: "25-35" 或 "30"）
+                    if isinstance(age_range, str) and "-" in age_range:
+                        min_age, max_age = map(int, age_range.split("-"))
+                        passed = min_age <= age <= max_age
+                        reason = f"候选人年龄: {age}岁, 要求范围: {age_range}岁"
+                    elif isinstance(age_range, (int, float)):
+                        # 单个年龄值，允许±2岁
+                        target_age = int(age_range)
+                        passed = abs(age - target_age) <= 2
+                        reason = f"候选人年龄: {age}岁, 要求: {age_range}岁（允许±2岁）"
+                    else:
+                        # 尝试解析字符串为整数
+                        target_age = int(age_range)
+                        passed = abs(age - target_age) <= 2
+                        reason = f"候选人年龄: {age}岁, 要求: {age_range}岁（允许±2岁）"
+                    expected_value = age_range
                 else:
-                    # 单个年龄值，允许±2岁
-                    target_age = int(age_range)
-                    passed = abs(age - target_age) <= 2
-                    reason = f"候选人年龄: {age}岁, 要求: {age_range}岁（允许±2岁）"
+                    # 使用操作符比较
+                    if isinstance(age_range, str) and age_range.isdigit():
+                        target_age = int(age_range)
+                    elif isinstance(age_range, (int, float)):
+                        target_age = int(age_range)
+                    else:
+                        target_age = 0
+                    passed = self._compare_values(age, target_age, operator)
+                    reason = f"候选人年龄: {age}岁, 要求: {age_range}岁, 操作符: {operator}"
+                    expected_value = age_range
             else:
-                # 使用操作符比较
-                target_age = int(age_range) if age_range.isdigit() else 0
-                passed = self._compare_values(age, target_age, operator)
-                reason = f"候选人年龄: {age}岁, 要求: {age_range}岁, 操作符: {operator}"
+                # 没有配置年龄要求，默认通过
+                return {
+                    "passed": True,
+                    "reason": "规则未设置年龄要求",
+                    "matched_value": age,
+                    "expected_value": None
+                }
             
             return {
                 "passed": passed,
                 "reason": reason,
                 "matched_value": age,
-                "expected_value": age_range
+                "expected_value": expected_value
             }
             
         except Exception as e:
@@ -353,7 +390,7 @@ class FilterService:
                 "passed": False,
                 "reason": f"检查年龄要求异常: {str(e)}",
                 "matched_value": None,
-                "expected_value": rule_config.get("age_range")
+                "expected_value": rule_config.get("age_range") or f"{rule_config.get('min_age', 'N/A')}-{rule_config.get('max_age', 'N/A')}"
             }
     
     def _check_location(self, rule_config: Dict[str, Any], resume_data: Dict[str, Any]) -> Dict[str, Any]:
