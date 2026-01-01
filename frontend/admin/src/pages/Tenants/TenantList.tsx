@@ -19,13 +19,11 @@ import {
   DeleteOutlined,
   EyeOutlined,
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
-import { tenantApi, Tenant, TenantCreate, TenantUpdate } from '@/services/tenantApi';
+import { tenantApi, Tenant } from '@/services/tenantApi';
 
 const { Option } = Select;
 
 const TenantList: React.FC = () => {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [total, setTotal] = useState(0);

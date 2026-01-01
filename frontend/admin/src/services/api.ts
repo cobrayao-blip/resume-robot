@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { message } from 'antd';
-import { useAuthStore } from '@/stores/authStore';
 
 // 强制使用相对路径，通过 Vite 代理访问后端
 // 在开发环境中，Vite 会将 /api 请求代理到 http://backend:8000

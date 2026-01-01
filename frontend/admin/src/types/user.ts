@@ -3,6 +3,8 @@ export interface PlatformAdmin {
   email: string;
   full_name?: string;
   is_active: boolean;
+  role?: string;
+  user_type?: string;
   created_at: string;
 }
 
